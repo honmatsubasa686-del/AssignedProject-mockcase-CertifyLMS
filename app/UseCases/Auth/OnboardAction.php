@@ -81,6 +81,11 @@ final class OnboardAction
                 $attrs['meeting_url'] = $validated['meeting_url'];
             }
 
+            $invitation->status = InvitationStatus::Accepted;
+
+            $invitation->accepted_at = $now;
+            $invitation->save();
+
             // record() は遷移前 status を参照するため、status を変更する forceFill より前に呼ぶ
             $this->statusChanger->record(
                 $user,
