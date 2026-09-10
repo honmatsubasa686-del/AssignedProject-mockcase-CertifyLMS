@@ -8,7 +8,9 @@ use App\Models\Certification;
 use App\Models\QaReply;
 use App\Models\QaThread;
 use App\Models\User;
+use App\Notifications\QaReplyReceivedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class StoreTest extends TestCase
@@ -117,5 +119,70 @@ class StoreTest extends TestCase
             ]);
 
         $response->assertSessionHasErrors('body');
+    }
+
+    public function test_question_owner_receives_notification_when_coach_replies(): void
+    {
+        Notification::fake();
+
+        $student = User::factory()->student()->inProgress()->create();
+        $coach = User::factory()->coach()->inProgress()->create();
+        $certification = Certification::factory()->published()->create();
+
+        $thread = QaThread::factory()->create([
+            'user_id' => $student->id,
+            'certification_id' => $certification->id,
+        ]);
+
+        $this->actingAs($coach)
+            ->post(route('qa-board.replies.store', $thread), [
+                'body' => 'コーチからの回答です。',
+            ]);
+
+        Notification::assertSentTo(
+            $student,
+            QaReplyReceivedNotification::class
+        );
+    }
+
+    public function test_question_owner_does_not_receive_notification_when_replying_to_own_thread(): void
+    {
+        Notification::fake();
+
+        $student = User::factory()->student()->inProgress()->create();
+        $certification = Certification::factory()->published()->create();
+
+        $thread = QaThread::factory()->create([
+            'user_id' => $student->id,
+            'certification_id' => $certification->id,
+        ]);
+
+        $this->actingAs($student)
+            ->post(route('qa-board.replies.store', $thread), [
+                'body' => '自分で回答します。',
+            ]);
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_notification_is_not_sent_when_question_owner_is_not_in_progress(): void
+    {
+        Notification::fake();
+
+        $student = User::factory()->student()->graduated()->create();
+        $coach = User::factory()->coach()->inProgress()->create();
+        $certification = Certification::factory()->published()->create();
+
+        $thread = QaThread::factory()->create([
+            'user_id' => $student->id,
+            'certification_id' => $certification->id,
+        ]);
+
+        $this->actingAs($coach)
+            ->post(route('qa-board.replies.store', $thread), [
+                'body' => 'コーチからの回答です。',
+            ]);
+
+        Notification::assertNothingSent();
     }
 }

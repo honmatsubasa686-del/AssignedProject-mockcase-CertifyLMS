@@ -11,8 +11,11 @@ use App\Models\CoachAvailability;
 use App\Models\Enrollment;
 use App\Models\Meeting;
 use App\Models\User;
+use App\Notifications\MeetingCanceledNotification;
+use App\Notifications\MeetingReservedNotification;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -89,6 +92,8 @@ class MeetingControllerTest extends TestCase
 
     public function test_store_creates_meeting_for_owner(): void
     {
+        Notification::fake();
+
         $student = User::factory()->student()->inProgress()->create(['max_meetings' => 3]);
         $admin = User::factory()->admin()->create();
         $coach = User::factory()->coach()->inProgress()->create([
@@ -113,6 +118,11 @@ class MeetingControllerTest extends TestCase
             'enrollment_id' => $enrollment->id,
             'status' => MeetingStatus::Reserved->value,
         ]);
+
+        Notification::assertSentTo(
+            $coach,
+            MeetingReservedNotification::class
+        );
     }
 
     public function test_store_rejects_non_zero_minutes(): void
@@ -152,6 +162,8 @@ class MeetingControllerTest extends TestCase
 
     public function test_cancel_allows_owner(): void
     {
+        Notification::fake();
+
         $student = User::factory()->student()->inProgress()->create(['max_meetings' => 5]);
         $coach = User::factory()->coach()->create();
         $meeting = Meeting::factory()->reserved()->forCoach($coach)->forStudent($student)->create([
@@ -162,6 +174,11 @@ class MeetingControllerTest extends TestCase
 
         $response->assertRedirect();
         $this->assertSame(MeetingStatus::Canceled, $meeting->fresh()->status);
+
+        Notification::assertSentTo(
+            $coach,
+            MeetingCanceledNotification::class
+        );
     }
 
     public function test_index_as_coach_only_lists_own_meetings(): void
@@ -315,5 +332,39 @@ class MeetingControllerTest extends TestCase
             'type' => MeetingQuotaTransactionType::Refunded->value,
             'amount' => 1,
         ]);
+    }
+
+    public function test_coach_cancel_notifies_student(): void
+    {
+        Notification::fake();
+
+        $student = User::factory()->student()->inProgress()->create([
+            'max_meetings' => 5,
+        ]);
+
+        $coach = User::factory()->coach()->inProgress()->create();
+
+        $meeting = Meeting::factory()
+            ->reserved()
+            ->forCoach($coach)
+            ->forStudent($student)
+            ->create([
+                'scheduled_at' => now()->addDays(3)->startOfHour(),
+            ]);
+
+        $response = $this->actingAs($coach)
+            ->post(route('meetings.cancel', $meeting));
+
+        $response->assertRedirect();
+
+        $this->assertSame(
+            MeetingStatus::Canceled,
+            $meeting->fresh()->status
+        );
+
+        Notification::assertSentTo(
+            $student,
+            MeetingCanceledNotification::class
+        );
     }
 }
