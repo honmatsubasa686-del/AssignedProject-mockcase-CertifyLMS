@@ -12,6 +12,7 @@ use App\Enums\UserStatus;
 use App\Models\Certificate;
 use App\Models\Certification;
 use App\Models\Enrollment;
+use App\Models\EnrollmentGoal;
 use App\Models\EnrollmentStatusLog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -143,6 +144,32 @@ final class EnrollmentSeeder extends Seeder
                 ],
             );
 
+            if ($index === 0) {
+                EnrollmentGoal::firstOrCreate(
+                    [
+                        'enrollment_id' => $enrollment->id,
+                        'title' => '過去問5年分を解き終える',
+                    ],
+                    [
+                        'description' => '毎週少しずつ進めて、試験前までに一通り解き終える。',
+                        'target_date' => now()->addMonth()->toDateString(),
+                        'achieved_at' => null,
+                    ],
+                );
+
+                EnrollmentGoal::firstOrCreate(
+                    [
+                        'enrollment_id' => $enrollment->id,
+                        'title' => '基礎教材を一周する',
+                    ],
+                    [
+                        'description' => 'まずは全体像をつかむために基礎教材を一通り確認する。',
+                        'target_date' => now()->subWeek()->toDateString(),
+                        'achieved_at' => now()->subDays(3),
+                    ],
+                );
+            }
+
             EnrollmentStatusLog::firstOrCreate(
                 ['enrollment_id' => $enrollment->id, 'to_status' => EnrollmentStatus::Learning->value],
                 [
@@ -199,6 +226,15 @@ final class EnrollmentSeeder extends Seeder
                     : now()->addDays($pattern['examDays'])->toDateString(),
                 'passed_at' => $passedAt,
             ]);
+
+            if ($i % 2 === 0) {
+                EnrollmentGoal::factory()->for($enrollment)->create([
+                    'title' => 'デモ用の個人目標',
+                    'description' => '認可と一覧表示の確認用目標です。',
+                    'target_date' => now()->addDays(14 + $i)->toDateString(),
+                    'achieved_at' => $i % 4 === 0 ? now()->subDay() : null,
+                ]);
+            }
 
             $this->seedStatusLogs($enrollment, $pattern['state'], $student);
 

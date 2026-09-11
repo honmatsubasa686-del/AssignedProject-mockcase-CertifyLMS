@@ -6,11 +6,14 @@ namespace Tests\Feature\Http\Enrollment;
 
 use App\Enums\EnrollmentStatus;
 use App\Models\Certification;
+use App\Models\CertificationCoachAssignment;
 use App\Models\Enrollment;
+use App\Models\EnrollmentGoal;
 use App\Models\MockExam;
 use App\Models\MockExamSession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -46,6 +49,60 @@ class EnrollmentControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertViewIs('enrollment.show');
+    }
+
+    public function test_assigned_coach_can_view_student_goals(): void
+    {
+        // Arrange
+        $admin = User::factory()->admin()->create();
+        $coach = User::factory()->coach()->create();
+        $student = User::factory()->student()->create();
+        $certification = Certification::factory()->published()->create();
+
+        CertificationCoachAssignment::create([
+            'id' => (string) Str::ulid(),
+            'certification_id' => $certification->id,
+            'user_id' => $coach->id,
+            'assigned_by_user_id' => $admin->id,
+            'assigned_at' => now(),
+        ]);
+
+        $enrollment = Enrollment::factory()->learning()->create([
+            'user_id' => $student->id,
+            'certification_id' => $certification->id,
+        ]);
+
+        EnrollmentGoal::factory()->for($enrollment)->create([
+            'title' => '担当コーチに見える目標',
+        ]);
+
+        // Act
+        $response = $this->actingAs($coach)
+            ->get(route('enrollments.show', $enrollment));
+
+        // Assert
+        $response->assertOk();
+        $response->assertSee('担当コーチに見える目標');
+    }
+
+    public function test_admin_can_view_student_goals(): void
+    {
+        // Arrange
+        $admin = User::factory()->admin()->create();
+        $student = User::factory()->student()->create();
+        $enrollment = Enrollment::factory()->for($student)->learning()->create();
+
+        EnrollmentGoal::factory()->for($enrollment)->create([
+            'title' => '管理者に見える目標',
+        ]);
+
+        // Act
+        $response = $this->actingAs($admin)
+            ->get(route('enrollments.show', $enrollment));
+
+        // Assert
+        $response->assertOk();
+        $response->assertSee('管理者に見える目標');
     }
 
     public function test_show_forbids_other_student(): void
