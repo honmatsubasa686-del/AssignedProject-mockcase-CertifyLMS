@@ -27,7 +27,7 @@ class ProfileController extends Controller
         $action($request->user(), $request->validated());
 
         return redirect()
-            ->route('settings.profile.show')
+            ->route('settings.profile.edit')
             ->with('success', 'プロフィールを更新しました。');
     }
 }

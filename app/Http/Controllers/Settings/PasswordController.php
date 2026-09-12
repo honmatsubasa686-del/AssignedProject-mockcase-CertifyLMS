@@ -25,7 +25,7 @@ class PasswordController extends Controller
         );
 
         return redirect()
-            ->route('settings.profile.show', ['tab' => 'password'])
+            ->route('settings.profile.edit', ['tab' => 'password'])
             ->with('success', 'パスワードを更新しました。');
     }
 }

@@ -23,7 +23,7 @@ class AvatarController extends Controller
         );
 
         return redirect()
-            ->route('settings.profile.show')
+            ->route('settings.profile.edit')
             ->with('success', 'アイコン画像を更新しました。');
     }
 
@@ -34,7 +34,7 @@ class AvatarController extends Controller
         $action($request->user());
 
         return redirect()
-            ->route('settings.profile.show')
+            ->route('settings.profile.edit')
             ->with('success', 'アイコン画像を削除しました。');
     }
 }

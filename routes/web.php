@@ -97,7 +97,7 @@ Route::middleware('auth')->group(function () {
         ->name('settings.')
         ->group(function () {
             Route::get('profile', [ProfileController::class, 'show'])
-                ->name('profile.show');
+                ->name('profile.edit');
 
             Route::patch('profile', [ProfileController::class, 'update'])
                 ->name('profile.update');
