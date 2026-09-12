@@ -69,6 +69,7 @@ class UserSeeder extends Seeder
                 'profile_setup_completed' => true,
                 'email_verified_at' => $now,
                 'meeting_url' => 'https://meet.google.com/coach-taro-room',
+                'avatar_url' => '/images/avatar/demo-coach.png',
             ])
             ->create();
 
