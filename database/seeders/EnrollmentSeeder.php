@@ -13,6 +13,7 @@ use App\Models\Certificate;
 use App\Models\Certification;
 use App\Models\Enrollment;
 use App\Models\EnrollmentGoal;
+use App\Models\EnrollmentNote;
 use App\Models\EnrollmentStatusLog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -130,6 +131,14 @@ final class EnrollmentSeeder extends Seeder
     {
         $targets = $publishedCerts->take(4);
 
+        $coach1 = User::query()
+            ->where('email', 'coach@certify-lms.test')
+            ->first();
+
+        $coach2 = User::query()
+            ->where('email', 'coach2@certify-lms.test')
+            ->first();
+
         foreach ($targets as $index => $certification) {
             $enrollment = Enrollment::firstOrCreate(
                 [
@@ -143,6 +152,50 @@ final class EnrollmentSeeder extends Seeder
                     'passed_at' => null,
                 ],
             );
+
+            if ($index === 0 && $coach1 !== null) {
+                EnrollmentNote::firstOrCreate(
+                    [
+                        'enrollment_id' => $enrollment->id,
+                        'author_user_id' => $coach1->id,
+                        'body' => '学習開始時の状況を確認しました。基礎教材から進めていきましょう。',
+                    ],
+                );
+            }
+
+            if ($index === 2) {
+                if ($coach1 !== null) {
+                    EnrollmentNote::firstOrCreate([
+                        'enrollment_id' => $enrollment->id,
+                        'author_user_id' => $coach1->id,
+                        'body' => 'coach1が記録した共有メモです。',
+                    ]);
+                }
+
+                if ($coach2 !== null) {
+                    EnrollmentNote::firstOrCreate([
+                        'enrollment_id' => $enrollment->id,
+                        'author_user_id' => $coach2->id,
+                        'body' => 'coach2が記録した共有メモです。',
+                    ]);
+                }
+
+                if ($admin !== null) {
+                    EnrollmentNote::firstOrCreate([
+                        'enrollment_id' => $enrollment->id,
+                        'author_user_id' => $admin->id,
+                        'body' => '管理者が記録した共有メモです。',
+                    ]);
+                }
+            }
+
+            if ($index === 3 && $coach2 !== null) {
+                EnrollmentNote::firstOrCreate([
+                    'enrollment_id' => $enrollment->id,
+                    'author_user_id' => $coach2->id,
+                    'body' => 'coach2が担当する資格のフォローメモです。',
+                ]);
+            }
 
             if ($index === 0) {
                 EnrollmentGoal::firstOrCreate(
@@ -226,6 +279,16 @@ final class EnrollmentSeeder extends Seeder
                     : now()->addDays($pattern['examDays'])->toDateString(),
                 'passed_at' => $passedAt,
             ]);
+
+            $assignedCoach = $certification->coaches()->first();
+
+            if ($assignedCoach !== null) {
+                EnrollmentNote::firstOrCreate([
+                    'enrollment_id' => $enrollment->id,
+                    'author_user_id' => $assignedCoach->id,
+                    'body' => '担当コーチによるデモ用の受講生メモです。',
+                ]);
+            }
 
             if ($i % 2 === 0) {
                 EnrollmentGoal::factory()->for($enrollment)->create([
