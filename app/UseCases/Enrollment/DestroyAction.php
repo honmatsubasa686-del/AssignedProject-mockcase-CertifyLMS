@@ -35,6 +35,7 @@ final class DestroyAction
             $user = $enrollment->user;
 
             $enrollment->goals()->delete();
+            $enrollment->notes()->delete();
             $enrollment->delete();
 
             $this->defaultEnrollmentService->resolveAfterStatusChange($user, $enrollment);
