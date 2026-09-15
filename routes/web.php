@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\AnnouncementManagementController;
 use App\Http\Controllers\Auth\OnboardingController;
 use App\Http\Controllers\BrowseController;
 use App\Http\Controllers\CertificationCatalogController;
@@ -86,8 +87,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])
         ->name('notifications.markAsRead');
 
+    Route::get('/notifications/{notification}', [NotificationController::class, 'show'])
+        ->name('notifications.show');
+
     // 受講登録(3 ロール共有: student=自分のみ / coach=担当範囲 / admin=全件)。
-    // 認可は EnrollmentPolicy::viewAny / view で 3 ロール対応済。閲覧範囲は EnrollmentController で
+   // 認可は EnrollmentPolicy::viewAny / view で 3 ロール対応済。閲覧範囲は EnrollmentController で
     // ロール別 eager-load + Blade の @can / @if で UI を出し分ける。
     Route::get('enrollments', [EnrollmentController::class, 'index'])->name('enrollments.index');
     Route::get('enrollments/{enrollment}', [EnrollmentController::class, 'show'])
@@ -329,6 +333,18 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
         ->name('admin.enrollments.updateExamDate');
     Route::post('enrollments/{enrollment}/fail', [EnrollmentManagementController::class, 'fail'])
         ->name('admin.enrollments.fail');
+
+    Route::get('announcements', [AnnouncementManagementController::class, 'index'])
+        ->name('admin.announcements.index');
+
+    Route::get('announcements/create', [AnnouncementManagementController::class, 'create'])
+        ->name('admin.announcements.create');
+
+    Route::post('announcements', [AnnouncementManagementController::class, 'store'])
+        ->name('admin.announcements.store');
+
+    Route::get('announcements/{announcement}', [AnnouncementManagementController::class, 'show'])
+        ->name('admin.announcements.show');
 });
 
 // ============================================================
