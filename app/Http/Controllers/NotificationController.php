@@ -53,4 +53,18 @@ class NotificationController extends Controller
 
         return redirect()->route('notifications.index');
     }
+
+    public function show(Request $request, string $notification): View
+    {
+        $notification = $request->user()
+            ->notifications()
+            ->whereKey($notification)
+            ->firstOrFail();
+
+        $notification->markAsRead();
+
+        return view('notifications.show', [
+            'notification' => $notification,
+        ]);
+    }
 }
