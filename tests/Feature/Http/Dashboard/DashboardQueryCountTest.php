@@ -64,9 +64,23 @@ class DashboardQueryCountTest extends TestCase
         $this->actingAs($coach);
 
         // Act: 基準のクエリ数を計測 → 担当受講生を 6 名追加して再計測
-        $baseline = $this->countQueriesFor(fn () => $this->get(route('dashboard.index')));
+        $baselineResponse = null;
+
+        $baseline = $this->countQueriesFor(function () use (&$baselineResponse): void {
+            $baselineResponse = $this->get(route('dashboard.index'));
+        });
+
+        $baselineResponse->assertOk();
+
         Enrollment::factory()->for($cert)->learning()->count(6)->create();
-        $scaled = $this->countQueriesFor(fn () => $this->get(route('dashboard.index')));
+
+        $scaledResponse = null;
+
+        $scaled = $this->countQueriesFor(function () use (&$scaledResponse): void {
+            $scaledResponse = $this->get(route('dashboard.index'));
+        });
+
+        $scaledResponse->assertOk();
 
         // Assert: 担当受講生が増えても発行クエリ数はほぼ一定 (N+1 なら件数分増える)
         $this->assertLessThanOrEqual(
