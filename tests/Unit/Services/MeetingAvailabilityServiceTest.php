@@ -7,12 +7,15 @@ namespace Tests\Unit\Services;
 use App\Exceptions\Mentoring\MeetingOutOfAvailabilityException;
 use App\Models\Certification;
 use App\Models\CoachAvailability;
+use App\Models\GoogleCredential;
 use App\Models\Meeting;
 use App\Models\User;
+use App\Services\GoogleCalendarService;
 use App\Services\MeetingAvailabilityService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Mockery;
 use Tests\TestCase;
 
 class MeetingAvailabilityServiceTest extends TestCase
@@ -121,5 +124,177 @@ class MeetingAvailabilityServiceTest extends TestCase
         // 例外が起きないことを確認
         app(MeetingAvailabilityService::class)->validateSlot($certification, Carbon::parse('2026-06-01 09:00:00'));
         $this->addToAssertionCount(1);
+    }
+
+    public function test_excludes_google_busy_periods_from_slots(): void
+    {
+        $certification = Certification::factory()->published()->create();
+        $coach = User::factory()->coach()->create();
+
+        $this->attachCoach($certification, $coach);
+
+        $date = Carbon::parse('2026-06-01');
+
+        CoachAvailability::factory()
+            ->forCoach($coach)
+            ->onDay(1)
+            ->timeRange('09:00:00', '12:00:00')
+            ->create();
+
+        GoogleCredential::create([
+            'user_id' => $coach->id,
+            'access_token' => 'test-access-token',
+            'refresh_token' => 'test-refresh-token',
+            'expires_at' => now()->addHour(),
+            'calendar_id' => 'primary',
+            'connected_at' => now(),
+        ]);
+
+        $googleCalendar = Mockery::mock(GoogleCalendarService::class);
+
+        $googleCalendar
+            ->shouldReceive('busyPeriods')
+            ->once()
+            ->andReturn(collect([
+                [
+                    'start' => Carbon::parse('2026-06-01 10:00:00'),
+                    'end' => Carbon::parse('2026-06-01 11:00:00'),
+                ],
+            ]));
+
+        $this->app->instance(
+            GoogleCalendarService::class,
+            $googleCalendar
+        );
+
+        $slots = app(MeetingAvailabilityService::class)
+            ->slotsForCertification($certification, $date);
+
+        $times = $slots
+            ->map(fn (array $slot) => $slot['slot_start']->format('H:i'))
+            ->all();
+
+        $this->assertSame(['09:00', '11:00'], $times);
+    }
+
+    public function test_keeps_lms_slots_when_google_busy_periods_are_unavailable(): void
+    {
+        $certification = Certification::factory()->published()->create();
+        $coach = User::factory()->coach()->create();
+
+        $this->attachCoach($certification, $coach);
+
+        $date = Carbon::parse('2026-06-01');
+
+        CoachAvailability::factory()
+            ->forCoach($coach)
+            ->onDay(1)
+            ->timeRange('09:00:00', '10:00:00')
+            ->create();
+
+        GoogleCredential::create([
+            'user_id' => $coach->id,
+            'access_token' => 'test-access-token',
+            'refresh_token' => 'test-refresh-token',
+            'expires_at' => now()->addHour(),
+            'calendar_id' => 'primary',
+            'connected_at' => now(),
+        ]);
+
+        $googleCalendar = Mockery::mock(GoogleCalendarService::class);
+
+        $googleCalendar
+            ->shouldReceive('busyPeriods')
+            ->once()
+            ->andReturn(collect());
+
+        $this->app->instance(
+            GoogleCalendarService::class,
+            $googleCalendar
+        );
+
+        $slots = app(MeetingAvailabilityService::class)
+            ->slotsForCertification($certification, $date);
+
+        $this->assertCount(1, $slots);
+        $this->assertSame(
+            '09:00',
+            $slots->first()['slot_start']->format('H:i')
+        );
+    }
+
+    public function test_available_coaches_for_slot_excludes_google_busy_coach(): void
+    {
+        $certification = Certification::factory()->published()->create();
+
+        $coachA = User::factory()->coach()->create();
+        $coachB = User::factory()->coach()->create();
+
+        $this->attachCoach($certification, $coachA);
+        $this->attachCoach($certification, $coachB);
+
+        $scheduledAt = Carbon::parse('2026-06-01 10:00:00');
+
+        CoachAvailability::factory()
+            ->forCoach($coachA)
+            ->onDay(1)
+            ->timeRange('09:00:00', '12:00:00')
+            ->create();
+
+        CoachAvailability::factory()
+            ->forCoach($coachB)
+            ->onDay(1)
+            ->timeRange('09:00:00', '12:00:00')
+            ->create();
+
+        GoogleCredential::create([
+            'user_id' => $coachA->id,
+            'access_token' => 'coach-a-access-token',
+            'refresh_token' => 'coach-a-refresh-token',
+            'expires_at' => now()->addHour(),
+            'calendar_id' => 'primary',
+            'connected_at' => now(),
+        ]);
+
+        GoogleCredential::create([
+            'user_id' => $coachB->id,
+            'access_token' => 'coach-b-access-token',
+            'refresh_token' => 'coach-b-refresh-token',
+            'expires_at' => now()->addHour(),
+            'calendar_id' => 'primary',
+            'connected_at' => now(),
+        ]);
+
+        $googleCalendar = Mockery::mock(GoogleCalendarService::class);
+
+        $googleCalendar
+            ->shouldReceive('busyPeriods')
+            ->twice()
+            ->andReturnUsing(function (GoogleCredential $credential) use ($coachA) {
+                if ($credential->user_id === $coachA->id) {
+                    return collect([
+                        [
+                            'start' => Carbon::parse('2026-06-01 10:00:00'),
+                            'end' => Carbon::parse('2026-06-01 11:00:00'),
+                        ],
+                    ]);
+                }
+
+                return collect();
+            });
+
+        $this->app->instance(
+            GoogleCalendarService::class,
+            $googleCalendar
+        );
+
+        $coaches = app(MeetingAvailabilityService::class)
+            ->availableCoachesForSlot(
+                $certification,
+                $scheduledAt
+            );
+
+        $this->assertCount(1, $coaches);
+        $this->assertSame($coachB->id, $coaches->first()->id);
     }
 }

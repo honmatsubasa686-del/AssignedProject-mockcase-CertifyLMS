@@ -9,6 +9,7 @@ use App\Exceptions\Mentoring\MeetingOutOfAvailabilityException;
 use App\Models\Certification;
 use App\Models\CoachAvailability;
 use App\Models\Meeting;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -21,10 +22,15 @@ use Illuminate\Support\Collection;
  */
 final class MeetingAvailabilityService
 {
+    public function __construct(
+        private readonly GoogleCalendarService $googleCalendarService,
+    ) {}
+
     /**
      * 指定 Certification の担当コーチ集合について、指定日 1 日分の 60 分単位空きスロットを返す。
      *
-     * 1 リクエストあたり availability 1 クエリ + meetings 1 クエリ で完結させる。
+     * LMS側は availability 1クエリ + meetings 1クエリで取得し、
+     * Google Calendar連携済みコーチは1日分のbusy情報を事前取得する。
      *
      * @return Collection<int, array{slot_start: Carbon, slot_end: Carbon, available_coach_count: int}>
      */
@@ -34,12 +40,30 @@ final class MeetingAvailabilityService
         $dayEnd = $date->copy()->endOfDay();
         $dayOfWeek = $date->dayOfWeek;
 
-        $coaches = $certification->coaches()->get();
+        $coaches = $certification->coaches()
+            ->with('googleCredential')
+            ->get();
         if ($coaches->isEmpty()) {
             return collect();
         }
 
         $coachIds = $coaches->pluck('id')->all();
+
+        $googleBusyByCoach = $coaches->mapWithKeys(function (User $coach) use ($dayStart, $dayEnd) {
+            $credential = $coach->googleCredential;
+
+            if ($credential === null) {
+                return [$coach->id => collect()];
+            }
+
+            return [
+                $coach->id => $this->googleCalendarService->busyPeriods(
+                    $credential,
+                    $dayStart,
+                    $dayEnd
+                ),
+            ];
+        });
 
         $availabilities = CoachAvailability::query()
             ->whereIn('coach_id', $coachIds)
@@ -71,9 +95,19 @@ final class MeetingAvailabilityService
                 $booked = $bookedByCoach[$coachId] ?? [];
 
                 if (! in_array($slotKey, $booked, true)) {
-                    $slotCounts[$slotKey] = ($slotCounts[$slotKey] ?? 0) + 1;
-                }
+                    $slotEnd = $slot->copy()->addHour();
 
+                    $busyPeriods = $googleBusyByCoach[$coachId] ?? collect();
+
+                    $isGoogleBusy = $busyPeriods->contains(
+                        fn (array $period): bool => $period['start']->lt($slotEnd)
+                            && $period['end']->gt($slot)
+                    );
+
+                    if (! $isGoogleBusy) {
+                        $slotCounts[$slotKey] = ($slotCounts[$slotKey] ?? 0) + 1;
+                    }
+                }
                 $slot->addHour();
             }
         }
@@ -108,5 +142,60 @@ final class MeetingAvailabilityService
         if (! $matched) {
             throw new MeetingOutOfAvailabilityException;
         }
+    }
+
+    /**
+     * 指定時刻に予約可能な担当コーチ一覧を返す。
+     *
+     * LMS側の availability / 既存Meeting に加えて、
+     * Google Calendar連携済みコーチはGoogleのbusy時間も考慮する。
+     *
+     * @return Collection<int, User>
+     */
+    public function availableCoachesForSlot(
+        Certification $certification,
+        Carbon $scheduledAt
+    ): Collection {
+        $time = $scheduledAt->format('H:i:s');
+
+        $coaches = $certification->coaches()
+            ->whereHas('coachAvailabilities', function ($q) use ($scheduledAt, $time) {
+                $q->where('day_of_week', $scheduledAt->dayOfWeek)
+                    ->where('is_active', true)
+                    ->where('start_time', '<=', $time)
+                    ->where('end_time', '>', $time);
+            })
+            ->whereDoesntHave('meetingsAsCoach', function ($q) use ($scheduledAt) {
+                $q->where('scheduled_at', $scheduledAt)
+                    ->whereIn('status', [
+                        MeetingStatus::Reserved->value,
+                        MeetingStatus::Completed->value,
+                    ]);
+            })
+            ->with('googleCredential')
+            ->get();
+
+        $slotEnd = $scheduledAt->copy()->addHour();
+
+        return $coaches
+            ->filter(function (User $coach) use ($scheduledAt, $slotEnd): bool {
+                $credential = $coach->googleCredential;
+
+                if ($credential === null) {
+                    return true;
+                }
+
+                $busyPeriods = $this->googleCalendarService->busyPeriods(
+                    $credential,
+                    $scheduledAt,
+                    $slotEnd
+                );
+
+                return ! $busyPeriods->contains(
+                    fn (array $period): bool => $period['start']->lt($slotEnd)
+                        && $period['end']->gt($scheduledAt)
+                );
+            })
+            ->values();
     }
 }

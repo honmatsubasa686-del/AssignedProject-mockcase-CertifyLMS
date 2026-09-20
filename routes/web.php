@@ -46,6 +46,7 @@ use App\Http\Controllers\SectionQuizController;
 use App\Http\Controllers\SectionQuizResultController;
 use App\Http\Controllers\Settings\AvailabilityController as SettingsAvailabilityController;
 use App\Http\Controllers\Settings\AvatarController;
+use App\Http\Controllers\Settings\GoogleCalendarController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SettingsDefaultEnrollmentController;
@@ -91,7 +92,7 @@ Route::middleware('auth')->group(function () {
         ->name('notifications.show');
 
     // 受講登録(3 ロール共有: student=自分のみ / coach=担当範囲 / admin=全件)。
-   // 認可は EnrollmentPolicy::viewAny / view で 3 ロール対応済。閲覧範囲は EnrollmentController で
+    // 認可は EnrollmentPolicy::viewAny / view で 3 ロール対応済。閲覧範囲は EnrollmentController で
     // ロール別 eager-load + Blade の @can / @if で UI を出し分ける。
     Route::get('enrollments', [EnrollmentController::class, 'index'])->name('enrollments.index');
     Route::get('enrollments/{enrollment}', [EnrollmentController::class, 'show'])
@@ -575,6 +576,21 @@ Route::middleware(['auth', 'role:student,coach', 'active-learning'])->group(func
 Route::middleware(['auth', 'role:coach', 'active-learning'])->group(function () {
     Route::get('coach/chat-rooms', [ChatRoomController::class, 'indexAsCoach'])
         ->name('coach.chat.index');
+});
+
+// ============================================================
+// コーチ専用ルート — Google Calendar 連携
+// ============================================================
+
+Route::middleware(['auth', 'role:coach'])->group(function () {
+    Route::get('/settings/google-calendar/connect', [GoogleCalendarController::class, 'redirect'])
+        ->name('settings.google-calendar.redirect');
+
+    Route::get('/settings/google-calendar/callback', [GoogleCalendarController::class, 'callback'])
+        ->name('settings.google-calendar.callback');
+
+    Route::delete('/settings/google-calendar', [GoogleCalendarController::class, 'destroy'])
+        ->name('settings.google-calendar.destroy');
 });
 
 // ============================================================
