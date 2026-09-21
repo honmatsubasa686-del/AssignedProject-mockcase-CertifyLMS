@@ -13,10 +13,12 @@ use App\Models\Meeting;
 use App\Models\User;
 use App\Notifications\MeetingCanceledNotification;
 use App\Notifications\MeetingReservedNotification;
+use App\Services\GoogleCalendarService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
+use Mockery;
 use Tests\TestCase;
 
 class MeetingControllerTest extends TestCase
@@ -178,6 +180,47 @@ class MeetingControllerTest extends TestCase
         Notification::assertSentTo(
             $coach,
             MeetingCanceledNotification::class
+        );
+    }
+
+    public function test_cancel_deletes_google_calendar_event(): void
+    {
+        Notification::fake();
+
+        $student = User::factory()->student()->inProgress()->create([
+            'max_meetings' => 5,
+        ]);
+
+        $coach = User::factory()->coach()->create();
+
+        $meeting = Meeting::factory()
+            ->reserved()
+            ->forCoach($coach)
+            ->forStudent($student)
+            ->create([
+                'scheduled_at' => now()->addDays(3)->startOfHour(),
+                'google_calendar_event_id' => 'google-event-123',
+            ]);
+
+        $googleCalendar = Mockery::mock(GoogleCalendarService::class);
+
+        $googleCalendar
+            ->shouldReceive('deleteMeetingEvent')
+            ->once();
+
+        $this->app->instance(
+            GoogleCalendarService::class,
+            $googleCalendar
+        );
+
+        $response = $this->actingAs($student)
+            ->post(route('meetings.cancel', $meeting));
+
+        $response->assertRedirect();
+
+        $this->assertSame(
+            MeetingStatus::Canceled,
+            $meeting->fresh()->status
         );
     }
 
@@ -366,5 +409,131 @@ class MeetingControllerTest extends TestCase
             $student,
             MeetingCanceledNotification::class
         );
+    }
+
+    public function test_store_saves_google_calendar_event_id_when_event_is_created(): void
+    {
+        Notification::fake();
+
+        $student = User::factory()->student()->inProgress()->create([
+            'max_meetings' => 3,
+        ]);
+
+        $admin = User::factory()->admin()->create();
+
+        $coach = User::factory()->coach()->inProgress()->create([
+            'meeting_url' => 'https://meet.example.com/coach-room',
+        ]);
+
+        $certification = Certification::factory()->published()->create();
+
+        $this->attachCoach($certification, $coach, $admin);
+
+        CoachAvailability::factory()
+            ->forCoach($coach)
+            ->onDay(1)
+            ->timeRange('09:00:00', '18:00:00')
+            ->create();
+
+        $enrollment = Enrollment::factory()
+            ->for($student, 'user')
+            ->for($certification)
+            ->learning()
+            ->create();
+
+        $scheduledAt = now()
+            ->startOfDay()
+            ->next(Carbon::MONDAY)
+            ->setTime(10, 0);
+
+        $googleCalendar = Mockery::mock(GoogleCalendarService::class);
+
+        $googleCalendar
+            ->shouldReceive('createMeetingEvent')
+            ->once()
+            ->andReturn('google-event-123');
+
+        $this->app->instance(
+            GoogleCalendarService::class,
+            $googleCalendar
+        );
+
+        $response = $this->actingAs($student)
+            ->post(route('meetings.store', $enrollment), [
+                'scheduled_at' => $scheduledAt->format('Y-m-d\TH:i:s'),
+                'topic' => '相談したい',
+            ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('meetings', [
+            'student_id' => $student->id,
+            'coach_id' => $coach->id,
+            'enrollment_id' => $enrollment->id,
+            'google_calendar_event_id' => 'google-event-123',
+        ]);
+    }
+
+    public function test_store_succeeds_when_google_event_creation_fails(): void
+    {
+        Notification::fake();
+
+        $student = User::factory()->student()->inProgress()->create([
+            'max_meetings' => 3,
+        ]);
+
+        $admin = User::factory()->admin()->create();
+
+        $coach = User::factory()->coach()->inProgress()->create([
+            'meeting_url' => 'https://meet.example.com/coach-room',
+        ]);
+
+        $certification = Certification::factory()->published()->create();
+
+        $this->attachCoach($certification, $coach, $admin);
+
+        CoachAvailability::factory()
+            ->forCoach($coach)
+            ->onDay(1)
+            ->timeRange('09:00:00', '18:00:00')
+            ->create();
+
+        $enrollment = Enrollment::factory()
+            ->for($student, 'user')
+            ->for($certification)
+            ->learning()
+            ->create();
+
+        $scheduledAt = now()
+            ->startOfDay()
+            ->next(Carbon::MONDAY)
+            ->setTime(10, 0);
+
+        $googleCalendar = Mockery::mock(GoogleCalendarService::class);
+
+        $googleCalendar
+            ->shouldReceive('createMeetingEvent')
+            ->once()
+            ->andReturn(null);
+
+        $this->app->instance(
+            GoogleCalendarService::class,
+            $googleCalendar
+        );
+
+        $response = $this->actingAs($student)
+            ->post(route('meetings.store', $enrollment), [
+                'scheduled_at' => $scheduledAt->format('Y-m-d\TH:i:s'),
+                'topic' => '相談したい',
+            ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('meetings', [
+            'student_id' => $student->id,
+            'coach_id' => $coach->id,
+            'status' => MeetingStatus::Reserved->value,
+            'google_calendar_event_id' => null,
+        ]);
     }
 }

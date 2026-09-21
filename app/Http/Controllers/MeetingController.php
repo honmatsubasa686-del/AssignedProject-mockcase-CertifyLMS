@@ -16,14 +16,13 @@ use App\Http\Requests\Meeting\IndexAsCoachRequest;
 use App\Http\Requests\Meeting\IndexRequest;
 use App\Http\Requests\Meeting\StoreRequest;
 use App\Http\Requests\Meeting\UpsertMemoRequest;
-use App\Models\Certification;
 use App\Models\Enrollment;
 use App\Models\Meeting;
 use App\Models\MeetingMemo;
-use App\Models\User;
 use App\Notifications\MeetingCanceledNotification;
 use App\Notifications\MeetingReservedNotification;
 use App\Services\CoachMeetingLoadService;
+use App\Services\GoogleCalendarService;
 use App\Services\MeetingAvailabilityService;
 use App\Services\MeetingQuotaService;
 use App\UseCases\MeetingQuota\ConsumeQuotaAction;
@@ -32,7 +31,6 @@ use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -170,6 +168,7 @@ class MeetingController extends Controller
         CoachMeetingLoadService $coachLoadService,
         MeetingQuotaService $quotaService,
         ConsumeQuotaAction $consumeAction,
+        GoogleCalendarService $googleCalendarService,
     ): RedirectResponse {
         $scheduledAt = Carbon::parse($request->validated('scheduled_at'));
         $topic = $request->validated('topic');
@@ -191,7 +190,11 @@ class MeetingController extends Controller
 
             $availabilityService->validateSlot($enrollment->certification, $scheduledAt);
 
-            $candidates = $this->findAvailableCoaches($enrollment->certification, $scheduledAt);
+            $candidates = $availabilityService->availableCoachesForSlot(
+                $enrollment->certification,
+                $scheduledAt
+            );
+
             if ($candidates->isEmpty()) {
                 throw new MeetingNoAvailableCoachException;
             }
@@ -219,6 +222,14 @@ class MeetingController extends Controller
             return $meeting->fresh();
         });
 
+        $googleEventId = $googleCalendarService->createMeetingEvent($meeting);
+
+        if ($googleEventId !== null) {
+            $meeting->update([
+                'google_calendar_event_id' => $googleEventId,
+            ]);
+        }
+
         $coach = $meeting->coach;
 
         if (
@@ -242,6 +253,7 @@ class MeetingController extends Controller
     public function cancel(
         Meeting $meeting,
         RefundQuotaAction $refundAction,
+        GoogleCalendarService $googleCalendarService,
     ): RedirectResponse {
         $this->authorize('cancel', $meeting);
 
@@ -267,6 +279,8 @@ class MeetingController extends Controller
 
             return $locked->fresh();
         });
+
+        $googleCalendarService->deleteMeetingEvent($canceledMeeting);
 
         $recipient = $actor->id === $canceledMeeting->student_id
             ? $canceledMeeting->coach
@@ -328,29 +342,5 @@ class MeetingController extends Controller
                 'available_coach_count' => $slot['available_coach_count'],
             ])->all(),
         ]);
-    }
-
-    /**
-     * 担当コーチ集合のうち、(1) 当該時刻に有効な availability 枠があり、
-     * (2) 当該時刻に reserved / completed の Meeting を持たないコーチ集合を返す。
-     *
-     * @return Collection<int, User>
-     */
-    private function findAvailableCoaches(Certification $certification, Carbon $scheduledAt): Collection
-    {
-        $time = $scheduledAt->format('H:i:s');
-
-        return $certification->coaches()
-            ->whereHas('coachAvailabilities', function ($q) use ($scheduledAt, $time) {
-                $q->where('day_of_week', $scheduledAt->dayOfWeek)
-                    ->where('is_active', true)
-                    ->where('start_time', '<=', $time)
-                    ->where('end_time', '>', $time);
-            })
-            ->whereDoesntHave('meetingsAsCoach', function ($q) use ($scheduledAt) {
-                $q->where('scheduled_at', $scheduledAt)
-                    ->whereIn('status', [MeetingStatus::Reserved->value, MeetingStatus::Completed->value]);
-            })
-            ->get();
     }
 }
