@@ -149,3 +149,31 @@ sail bin pint --test     # 整形漏れの確認（CI 相当のチェック）
 Google Calendar連携では、OAuthで取得したアクセストークンおよびリフレッシュトークンをデータベースに保存します。
 
 本番環境では、これらのトークンを平文のまま保存せず、Laravelの暗号化機能などを利用して暗号化して保存することを推奨します。
+
+### AI相談機能の提供UI変更について
+
+AI相談機能では、提供済みUI上に以下の内部メタデータが受講生向けに表示される実装が含まれていました。
+
+- Geminiモデル名
+- AI応答時間
+- 出力トークン数
+
+PM確認により、これらは「内部運用・記録用途のみとし、受講生には表示しない」仕様であることが確定したため、仕様との整合を取る目的で提供UIを最小限変更しています。
+
+変更対象:
+
+- `resources/views/ai-chat/show.blade.php`
+- `resources/views/ai-chat/_partials/message-bubble.blade.php`
+- `resources/views/components/ai-chat/floating-widget.blade.php`
+- `resources/js/ai-chat/message-renderer.js`
+- `resources/views/layouts/_partials/sidebar-student.blade.php`
+
+変更内容:
+
+- Geminiモデル名の表示を削除
+- AI応答時間の表示を削除
+- 出力トークン数の表示を削除
+
+なお、モデル名・入力/出力トークン数・応答時間は内部運用情報としてDBには引き続き保存しています。
+
+また、Gemini APIの実接続確認時、`gemini-2.5-flash` では新規プロジェクトから404が返却されたため、実利用モデルを `gemini-3.5-flash` に変更しています。
