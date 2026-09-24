@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\AiChatController;
 use App\Http\Controllers\AnnouncementManagementController;
 use App\Http\Controllers\Auth\OnboardingController;
 use App\Http\Controllers\BrowseController;
@@ -660,3 +661,34 @@ if (app()->environment('local')) {
         return view('_dev.components');
     })->name('_dev.components');
 }
+
+// ============================================================
+// 受講生専用ルート — AI 相談
+// ============================================================
+Route::middleware([
+    'auth',
+    'role:student',
+    'active-learning',
+    'ai-chat.enabled',
+])
+    ->prefix('ai-chat')
+    ->name('ai-chat.')
+    ->group(function () {
+        Route::get('/', [AiChatController::class, 'index'])
+            ->name('index');
+
+        Route::post('conversations', [AiChatController::class, 'store'])
+            ->name('conversations.store');
+
+        Route::get('conversations/{conversation}', [AiChatController::class, 'show'])
+            ->name('conversations.show');
+
+        Route::patch('conversations/{conversation}', [AiChatController::class, 'update'])
+            ->name('conversations.update');
+
+        Route::delete('conversations/{conversation}', [AiChatController::class, 'destroy'])
+            ->name('conversations.destroy');
+
+        Route::post('conversations/{conversation}/messages', [AiChatController::class, 'storeMessage'])
+            ->name('conversations.messages.store');
+    });
