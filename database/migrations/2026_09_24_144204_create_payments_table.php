@@ -1,0 +1,60 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\PaymentStatus;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('payments', function (Blueprint $table) {
+            $table->ulid('id')->primary();
+
+            $table->foreignUlid('user_id')
+                ->constrained('users')
+                ->restrictOnDelete();
+
+            $table->foreignUlid('meeting_pack_id')
+                ->constrained('meeting_packs')
+                ->restrictOnDelete();
+
+            $table->string('status', 20)
+                ->default(PaymentStatus::Pending->value);
+
+            $table->unsignedInteger('amount');
+            $table->unsignedInteger('quantity');
+
+            $table->string('currency', 3)
+                ->default('jpy');
+
+            $table->string('stripe_checkout_session_id')
+                ->nullable()
+                ->unique();
+
+            $table->string('stripe_payment_intent_id')
+                ->nullable()
+                ->index();
+
+            $table->timestamp('paid_at')->nullable();
+
+            $table->timestamps();
+
+            $table->index(['user_id', 'created_at']);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('payments');
+    }
+};

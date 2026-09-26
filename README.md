@@ -142,6 +142,29 @@ sail bin pint --test     # 整形漏れの確認（CI 相当のチェック）
 
 - `PUSHER_*` — チャットのリアルタイム配信に使用します。有効にする場合は Pusher のキーを取得して設定し、`BROADCAST_DRIVER=pusher` に変更してください。未設定（既定の `BROADCAST_DRIVER=log`）でもメッセージの送受信自体は動作し、相手画面へのリアルタイム反映のみ行われません
 
+### Stripe決済のローカル確認
+
+追加面談パックの購入機能では Stripe Checkout を使用します。
+
+`.env` に以下を設定してください。
+
+```env
+STRIPE_SECRET=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+`STRIPE_SECRET` には Stripe のテスト用シークレットキーを設定します。
+
+Webhook をローカルで受信するには Stripe CLI を使用します。
+
+```bash
+stripe login
+stripe listen --all-snapshot --forward-to localhost:8000/webhooks/stripe
+
+`stripe listen` 実行時に表示される `whsec_...` を `.env` の `STRIPE_WEBHOOK_SECRET` に設定し、設定キャッシュをクリアします。
+
+```bash
+sail artisan config:clear
+
 新しい環境変数やセットアップ手順を追加した場合は、`.env.example` と本 README に追記し、チームの誰でも環境を再現できる状態を保ってください。
 
 ### Google Calendar連携について
