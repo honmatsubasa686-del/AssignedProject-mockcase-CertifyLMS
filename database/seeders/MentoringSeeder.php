@@ -146,6 +146,36 @@ final class MentoringSeeder extends Seeder
         MeetingMemo::factory()->forMeeting($completed)->create([
             'body' => "初回面談で目標受験日と学習ペースをすり合わせました。\n\n次回までに過去問 1 年分を解いて結果を共有してもらう想定です。",
         ]);
+
+        // 過去の canceled（キャンセル通知・返金履歴の動作確認用）
+        $canceledAt = $this->lastWeekdayAt(
+            targetDow: 1,
+            hour: 19,
+            weeksAgo: 4,
+        );
+
+        $canceled = Meeting::factory()
+            ->canceled()
+            ->forCoach($coach)
+            ->forStudent($student)
+            ->forEnrollment($enrollment)
+            ->create([
+                'scheduled_at' => $canceledAt,
+                'canceled_at' => $canceledAt->copy()->subDay(),
+                'canceled_by_user_id' => $student->id,
+                'topic' => '予定変更のためキャンセルした面談。',
+            ]);
+
+        $this->insertConsumedTransaction(
+            $student,
+            $canceled,
+            occurredAt: $canceledAt->copy()->subDays(2),
+        );
+
+        $this->insertRefundedTransaction(
+            $student,
+            $canceled,
+        );
     }
 
     /**
