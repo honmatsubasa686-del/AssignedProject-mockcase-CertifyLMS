@@ -9,6 +9,7 @@ use App\Exceptions\Enrollment\CompletionNotEligibleException;
 use App\Exceptions\Enrollment\EnrollmentNotLearningException;
 use App\Models\Certificate;
 use App\Models\Enrollment;
+use App\Services\Certificate\CertificatePdfService;
 use App\Services\CompletionEligibilityService;
 use App\Services\EnrollmentStatusChangeService;
 use App\UseCases\Certificate\IssueAction as IssueCertificateAction;
@@ -34,6 +35,7 @@ final class ReceiveCertificateAction
         private readonly CompletionEligibilityService $eligibility,
         private readonly EnrollmentStatusChangeService $statusChanger,
         private readonly IssueCertificateAction $issueCertificate,
+        private readonly CertificatePdfService $certificatePdf,
     ) {}
 
     /**
@@ -65,6 +67,8 @@ final class ReceiveCertificateAction
             );
 
             $certificate = ($this->issueCertificate)($enrollment->refresh());
+
+            $this->certificatePdf->generate($certificate);
 
             return $certificate;
         });
