@@ -6,6 +6,7 @@ use App\Http\Controllers\AiChatController;
 use App\Http\Controllers\AnnouncementManagementController;
 use App\Http\Controllers\Auth\OnboardingController;
 use App\Http\Controllers\BrowseController;
+use App\Http\Controllers\CertificateDownloadController;
 use App\Http\Controllers\CertificationCatalogController;
 use App\Http\Controllers\CertificationCategoryController;
 use App\Http\Controllers\CertificationCoachAssignmentController;
@@ -713,3 +714,11 @@ Route::middleware([
         Route::post('conversations/{conversation}/messages', [AiChatController::class, 'storeMessage'])
             ->name('conversations.messages.store');
     });
+
+// ============================================================
+// PDF出力・ダウンロードルート
+// ============================================================
+Route::middleware('auth')->group(function () {
+    Route::get('certificates/{certificate}/download', CertificateDownloadController::class)
+        ->name('certificates.download');
+});
