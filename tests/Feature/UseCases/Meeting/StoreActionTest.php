@@ -232,6 +232,9 @@ final class StoreActionTest extends TestCase
         );
     }
 
+    /**
+     * @group external-api
+     */
     public function test_saves_google_calendar_event_id_when_event_is_created(): void
     {
         Notification::fake();
@@ -304,6 +307,9 @@ final class StoreActionTest extends TestCase
         );
     }
 
+    /**
+     * @group external-api
+     */
     public function test_succeeds_when_google_event_creation_fails(): void
     {
         Notification::fake();

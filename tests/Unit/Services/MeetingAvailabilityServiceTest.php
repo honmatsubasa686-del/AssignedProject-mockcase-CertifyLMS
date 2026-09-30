@@ -126,6 +126,9 @@ class MeetingAvailabilityServiceTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    /**
+     * @group external-api
+     */
     public function test_excludes_google_busy_periods_from_slots(): void
     {
         $certification = Certification::factory()->published()->create();
@@ -177,6 +180,9 @@ class MeetingAvailabilityServiceTest extends TestCase
         $this->assertSame(['09:00', '11:00'], $times);
     }
 
+    /**
+     * @group external-api
+     */
     public function test_keeps_lms_slots_when_google_busy_periods_are_unavailable(): void
     {
         $certification = Certification::factory()->published()->create();
@@ -223,6 +229,9 @@ class MeetingAvailabilityServiceTest extends TestCase
         );
     }
 
+    /**
+     * @group external-api
+     */
     public function test_available_coaches_for_slot_excludes_google_busy_coach(): void
     {
         $certification = Certification::factory()->published()->create();

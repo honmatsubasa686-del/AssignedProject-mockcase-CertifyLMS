@@ -15,6 +15,9 @@ use Mockery\MockInterface;
 use Stripe\Checkout\Session;
 use Tests\TestCase;
 
+/**
+ * @group external-api
+ */
 class StripeWebhookTest extends TestCase
 {
     use RefreshDatabase;
@@ -421,5 +424,66 @@ class StripeWebhookTest extends TestCase
             2,
             app(MeetingQuotaService::class)->remaining($student),
         );
+    }
+
+    private function stripeSignature(
+        string $payload,
+        string $secret,
+        ?int $timestamp = null
+    ): string {
+        $timestamp ??= time();
+
+        $signature = hash_hmac(
+            'sha256',
+            $timestamp.'.'.$payload,
+            $secret
+        );
+
+        return "t={$timestamp},v1={$signature}";
+    }
+
+    public function test_webhook_with_invalid_stripe_signature_is_rejected(): void
+    {
+        $webhookSecret = 'whsec_test_secret';
+
+        config([
+            'services.stripe.webhook_secret' => $webhookSecret,
+        ]);
+
+        $payload = json_encode([
+            'id' => 'evt_test_invalid_signature',
+            'object' => 'event',
+            'type' => 'checkout.session.completed',
+            'data' => [
+                'object' => [
+                    'id' => 'cs_test_invalid_signature',
+                    'object' => 'checkout.session',
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $signature = $this->stripeSignature(
+            $payload,
+            'wrong-secret'
+        );
+
+        $response = $this->call(
+            'POST',
+            route('webhooks.stripe'),
+            [],
+            [],
+            [],
+            [
+                'HTTP_STRIPE_SIGNATURE' => $signature,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            $payload,
+        );
+
+        $response->assertBadRequest();
+
+        $response->assertJson([
+            'message' => 'Invalid Stripe webhook.',
+        ]);
     }
 }
