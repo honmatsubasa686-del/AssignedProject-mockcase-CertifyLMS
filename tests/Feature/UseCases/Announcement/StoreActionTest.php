@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace Tests\Feature\UseCases\Announcement;
 
+use App\Enums\AnnouncementTargetType;
 use App\Enums\UserStatus;
+use App\Jobs\SendAnnouncementNotificationsJob;
 use App\Models\Certification;
 use App\Models\Enrollment;
-use App\Enums\AnnouncementTargetType;
 use App\Models\User;
 use App\Notifications\AnnouncementNotification;
 use App\UseCases\Announcement\StoreAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
+use RuntimeException;
 use Tests\TestCase;
 
 class StoreActionTest extends TestCase
@@ -294,5 +298,68 @@ class StoreActionTest extends TestCase
             $student->id,
             $announcement->target_user_id,
         );
+    }
+
+    public function test_dispatches_one_announcement_notification_job(): void
+    {
+        Queue::fake();
+
+        $admin = User::factory()->admin()->create();
+
+        User::factory()
+            ->count(3)
+            ->student()
+            ->inProgress()
+            ->create();
+
+        app(StoreAction::class)(
+            $admin,
+            [
+                'title' => '全受講生向けのお知らせ',
+                'body' => '非同期配信を確認します。',
+                'target_type' => AnnouncementTargetType::AllStudents->value,
+                'target_certification_id' => null,
+                'target_user_id' => null,
+            ]
+        );
+
+        Queue::assertPushed(
+            SendAnnouncementNotificationsJob::class,
+            1
+        );
+    }
+
+    public function test_does_not_dispatch_job_when_transaction_rolls_back(): void
+    {
+        Queue::fake();
+
+        $admin = User::factory()->admin()->create();
+
+        try {
+            DB::transaction(function () use ($admin): void {
+                app(StoreAction::class)(
+                    $admin,
+                    [
+                        'title' => 'ロールバック確認',
+                        'body' => 'このお知らせは保存されません。',
+                        'target_type' => AnnouncementTargetType::AllStudents->value,
+                        'target_certification_id' => null,
+                        'target_user_id' => null,
+                    ]
+                );
+
+                throw new RuntimeException('rollback');
+            });
+        } catch (RuntimeException) {
+            //
+        }
+
+        Queue::assertNotPushed(
+            SendAnnouncementNotificationsJob::class
+        );
+
+        $this->assertDatabaseMissing('announcements', [
+            'title' => 'ロールバック確認',
+        ]);
     }
 }

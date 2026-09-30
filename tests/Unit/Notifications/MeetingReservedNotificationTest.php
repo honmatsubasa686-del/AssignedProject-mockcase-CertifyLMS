@@ -7,6 +7,7 @@ namespace Tests\Unit\Notifications;
 use App\Models\Meeting;
 use App\Models\User;
 use App\Notifications\MeetingReservedNotification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Messages\MailMessage;
 use Tests\TestCase;
@@ -68,5 +69,27 @@ class MeetingReservedNotificationTest extends TestCase
             route('meetings.show', $meeting),
             $mail->actionUrl
         );
+    }
+
+    public function test_notification_is_queued_with_retry_configuration(): void
+    {
+        $student = User::factory()->student()->inProgress()->create();
+        $coach = User::factory()->coach()->inProgress()->create();
+
+        $meeting = Meeting::factory()
+            ->reserved()
+            ->forCoach($coach)
+            ->forStudent($student)
+            ->create();
+
+        $notification = new MeetingReservedNotification($meeting);
+
+        $this->assertInstanceOf(
+            ShouldQueue::class,
+            $notification
+        );
+
+        $this->assertSame(3, $notification->tries);
+        $this->assertSame([10, 30], $notification->backoff());
     }
 }

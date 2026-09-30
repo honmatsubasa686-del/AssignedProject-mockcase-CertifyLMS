@@ -7,9 +7,9 @@ namespace App\UseCases\Meeting;
 use App\Enums\MeetingReminderWindow;
 use App\Enums\MeetingStatus;
 use App\Enums\UserStatus;
+use App\Jobs\SendMeetingReminderNotificationJob;
 use App\Models\Meeting;
 use App\Models\MeetingReminder;
-use App\Notifications\MeetingReminderNotification;
 use Illuminate\Support\Facades\DB;
 
 final class SendMeetingReminderAction
@@ -57,28 +57,8 @@ final class SendMeetingReminderAction
                     ]);
                 }
 
-                DB::afterCommit(function () use ($recipient, $locked, $window, $reminder): void {
-                    if ($reminder->database_sent_at === null) {
-                        $recipient->notifyNow(
-                            new MeetingReminderNotification($locked, $window),
-                            ['database']
-                        );
-
-                        $reminder->update([
-                            'database_sent_at' => now(),
-                        ]);
-                    }
-
-                    if ($reminder->mail_sent_at === null) {
-                        $recipient->notifyNow(
-                            new MeetingReminderNotification($locked, $window),
-                            ['mail']
-                        );
-
-                        $reminder->update([
-                            'mail_sent_at' => now(),
-                        ]);
-                    }
+                DB::afterCommit(function () use ($reminder): void {
+                    SendMeetingReminderNotificationJob::dispatch($reminder);
                 });
             }
         });

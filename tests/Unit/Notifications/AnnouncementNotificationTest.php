@@ -7,6 +7,7 @@ namespace Tests\Unit\Notifications;
 use App\Models\Announcement;
 use App\Models\User;
 use App\Notifications\AnnouncementNotification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Tests\TestCase;
 
@@ -74,5 +75,20 @@ class AnnouncementNotificationTest extends TestCase
             route('notifications.show', 'test-notification-id'),
             $mail->actionUrl
         );
+    }
+
+    public function test_notification_is_queued_with_retry_configuration(): void
+    {
+        $announcement = Announcement::factory()->create();
+
+        $notification = new AnnouncementNotification($announcement);
+
+        $this->assertInstanceOf(
+            ShouldQueue::class,
+            $notification
+        );
+
+        $this->assertSame(3, $notification->tries);
+        $this->assertSame([10, 30], $notification->backoff());
     }
 }

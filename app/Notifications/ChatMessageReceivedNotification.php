@@ -7,12 +7,23 @@ namespace App\Notifications;
 use App\Models\ChatMessage;
 use App\Models\ChatRoom;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class ChatMessageReceivedNotification extends Notification
+class ChatMessageReceivedNotification extends Notification implements ShouldQueue
 {
     use Queueable;
+
+    public int $tries = 3;
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [10, 30];
+    }
 
     /**
      * Create a new notification instance.

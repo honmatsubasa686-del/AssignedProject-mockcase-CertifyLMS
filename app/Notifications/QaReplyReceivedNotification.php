@@ -7,12 +7,23 @@ namespace App\Notifications;
 use App\Models\QaReply;
 use App\Models\QaThread;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class QaReplyReceivedNotification extends Notification
+class QaReplyReceivedNotification extends Notification implements ShouldQueue
 {
     use Queueable;
+
+    public int $tries = 3;
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [10, 30];
+    }
 
     /**
      * Create a new notification instance.

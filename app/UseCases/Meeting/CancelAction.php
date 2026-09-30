@@ -63,7 +63,7 @@ final class CancelAction
                 && $recipient->status === UserStatus::InProgress
             ) {
                 $recipient->notify(
-                    new MeetingCanceledNotification($canceledMeeting)
+                    (new MeetingCanceledNotification($canceledMeeting))->afterCommit()
                 );
             }
 
