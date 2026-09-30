@@ -6,6 +6,7 @@ namespace Tests\Feature\UseCases\Meeting;
 
 use App\Enums\MeetingReminderWindow;
 use App\Enums\UserStatus;
+use App\Jobs\SendMeetingReminderNotificationJob;
 use App\Models\Meeting;
 use App\Models\MeetingReminder;
 use App\Models\User;
@@ -13,6 +14,7 @@ use App\Notifications\MeetingReminderNotification;
 use App\UseCases\Meeting\SendMeetingReminderAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class SendMeetingReminderActionTest extends TestCase
@@ -183,8 +185,10 @@ class SendMeetingReminderActionTest extends TestCase
         $this->assertDatabaseCount('meeting_reminders', 0);
     }
 
-    public function test_records_sent_at_for_each_notification_channel(): void
+    public function test_dispatches_reminder_notification_jobs(): void
     {
+        Queue::fake();
+
         Notification::fake();
 
         $student = User::factory()->student()->inProgress()->create();
@@ -209,8 +213,10 @@ class SendMeetingReminderActionTest extends TestCase
         $this->assertCount(2, $reminders);
 
         foreach ($reminders as $reminder) {
-            $this->assertNotNull($reminder->database_sent_at);
-            $this->assertNotNull($reminder->mail_sent_at);
+            Queue::assertPushed(
+                SendMeetingReminderNotificationJob::class,
+                2
+            );
         }
     }
 }

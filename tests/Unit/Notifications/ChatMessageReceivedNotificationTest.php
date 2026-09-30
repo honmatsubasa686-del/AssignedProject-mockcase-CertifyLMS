@@ -9,6 +9,7 @@ use App\Models\ChatRoom;
 use App\Models\Enrollment;
 use App\Models\User;
 use App\Notifications\ChatMessageReceivedNotification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Messages\MailMessage;
 use Tests\TestCase;
@@ -75,5 +76,26 @@ class ChatMessageReceivedNotificationTest extends TestCase
             route('chat.show', $room),
             $mail->actionUrl
         );
+    }
+
+    public function test_notification_is_queued_with_retry_configuration(): void
+    {
+        $student = User::factory()->student()->inProgress()->create();
+        $enrollment = Enrollment::factory()->for($student)->create();
+        $room = ChatRoom::factory()->for($enrollment)->create();
+        $message = ChatMessage::factory()->create([
+            'chat_room_id' => $room->id,
+            'sender_user_id' => $student->id,
+        ]);
+
+        $notification = new ChatMessageReceivedNotification($room, $message);
+
+        $this->assertInstanceOf(
+            ShouldQueue::class,
+            $notification
+        );
+
+        $this->assertSame(3, $notification->tries);
+        $this->assertSame([10, 30], $notification->backoff());
     }
 }

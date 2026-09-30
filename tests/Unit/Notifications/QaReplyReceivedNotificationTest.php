@@ -9,6 +9,7 @@ use App\Models\QaReply;
 use App\Models\QaThread;
 use App\Models\User;
 use App\Notifications\QaReplyReceivedNotification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Tests\TestCase;
 
@@ -75,5 +76,28 @@ class QaReplyReceivedNotificationTest extends TestCase
             route('qa-board.show', $thread).'#reply-'.$reply->id,
             $mail->actionUrl
         );
+    }
+
+    public function test_notification_is_queued_with_retry_configuration(): void
+    {
+        $student = User::factory()->student()->inProgress()->create();
+        $certification = Certification::factory()->published()->create();
+        $thread = QaThread::factory()->create([
+            'user_id' => $student->id,
+            'certification_id' => $certification->id,
+        ]);
+        $reply = QaReply::factory()->create([
+            'qa_thread_id' => $thread->id,
+        ]);
+
+        $notification = new QaReplyReceivedNotification($thread, $reply);
+
+        $this->assertInstanceOf(
+            ShouldQueue::class,
+            $notification
+        );
+
+        $this->assertSame(3, $notification->tries);
+        $this->assertSame([10, 30], $notification->backoff());
     }
 }

@@ -99,4 +99,14 @@ class InvitationMailTest extends TestCase
             '招待メールは ShouldQueue 実装で非同期キュー送信されるはず (送信遅延がユーザー体感に影響しないように)',
         );
     }
+
+    public function test_mailable_has_retry_configuration(): void
+    {
+        $invitation = Invitation::factory()->pending()->create();
+
+        $mailable = new InvitationMail($invitation);
+
+        $this->assertSame(3, $mailable->tries);
+        $this->assertSame([10, 30], $mailable->backoff());
+    }
 }

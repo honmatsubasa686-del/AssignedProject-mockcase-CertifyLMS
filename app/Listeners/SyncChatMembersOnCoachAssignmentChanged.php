@@ -17,8 +17,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
  */
 final class SyncChatMembersOnCoachAssignmentChanged implements ShouldQueue
 {
-    public string $queue = 'database';
-
     public function __construct(
         private readonly ChatMemberSyncService $sync,
     ) {}

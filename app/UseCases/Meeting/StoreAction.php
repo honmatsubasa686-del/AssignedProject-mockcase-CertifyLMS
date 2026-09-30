@@ -100,7 +100,7 @@ final class StoreAction
                 && $coach->status === UserStatus::InProgress
             ) {
                 $coach->notify(
-                    new MeetingReservedNotification($meeting)
+                    (new MeetingReservedNotification($meeting))->afterCommit()
                 );
             }
 
