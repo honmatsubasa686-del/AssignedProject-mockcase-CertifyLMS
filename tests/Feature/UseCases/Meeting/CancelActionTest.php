@@ -136,6 +136,9 @@ final class CancelActionTest extends TestCase
         );
     }
 
+    /**
+     * @group external-api
+     */
     public function test_deletes_google_calendar_event(): void
     {
         Notification::fake();

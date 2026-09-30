@@ -11,6 +11,9 @@ use Google\Client as GoogleClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
+/**
+ * @group external-api
+ */
 class GoogleCalendarControllerTest extends TestCase
 {
     use RefreshDatabase;

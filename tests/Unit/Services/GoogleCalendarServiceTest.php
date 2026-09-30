@@ -12,9 +12,14 @@ use App\Models\User;
 use App\Services\GoogleCalendarService;
 use Carbon\Carbon;
 use Google\Client as GoogleClient;
+use Google\Service\Calendar;
+use Google\Service\Calendar\Resource\Events;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
+/**
+ * @group external-api
+ */
 class GoogleCalendarServiceTest extends TestCase
 {
     use RefreshDatabase;
@@ -151,6 +156,128 @@ class GoogleCalendarServiceTest extends TestCase
         $service->deleteMeetingEvent($meeting);
 
         $this->addToAssertionCount(1);
+    }
+
+    public function test_delete_meeting_event_does_not_throw_when_google_event_is_already_deleted(): void
+    {
+        $student = User::factory()->student()->create();
+        $coach = User::factory()->coach()->create();
+
+        GoogleCredential::create([
+            'user_id' => $coach->id,
+            'access_token' => 'test-access-token',
+            'refresh_token' => 'test-refresh-token',
+            'expires_at' => now()->addHour(),
+            'calendar_id' => 'primary',
+            'connected_at' => now(),
+        ]);
+
+        $meeting = Meeting::factory()
+            ->reserved()
+            ->forCoach($coach)
+            ->forStudent($student)
+            ->create([
+                'scheduled_at' => now()->addDays(3)->startOfHour(),
+                'google_calendar_event_id' => 'already-deleted-event',
+            ]);
+
+        $calendarService = $this->createMock(Calendar::class);
+
+        $calendarService->events = $this->getMockBuilder(
+            Events::class
+        )
+
+            ->disableOriginalConstructor()
+            ->onlyMethods([
+                'delete',
+            ])
+            ->getMock();
+
+        $calendarService->events
+            ->expects($this->once())
+            ->method('delete')
+            ->with(
+                'primary',
+                'already-deleted-event'
+            )
+            ->willThrowException(
+                new \RuntimeException('Google event already deleted')
+            );
+
+        $googleClient = new GoogleClient;
+
+        $service = $this->getMockBuilder(GoogleCalendarService::class)
+            ->onlyMethods([
+                'authenticatedClient',
+                'makeCalendarService',
+            ])
+            ->getMock();
+
+        $service
+            ->method('authenticatedClient')
+            ->willReturn($googleClient);
+
+        $service
+            ->method('makeCalendarService')
+            ->willReturn($calendarService);
+
+        $service->deleteMeetingEvent($meeting);
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_authenticated_client_refreshes_expired_credential(): void
+    {
+        $user = User::factory()->coach()->create();
+
+        $credential = GoogleCredential::create([
+            'user_id' => $user->id,
+            'access_token' => 'expired-access-token',
+            'refresh_token' => 'valid-refresh-token',
+            'expires_at' => now()->subHour(),
+            'calendar_id' => 'primary',
+            'connected_at' => now(),
+        ]);
+
+        $googleClient = $this->getMockBuilder(GoogleClient::class)
+            ->onlyMethods([
+                'fetchAccessTokenWithRefreshToken',
+            ])
+            ->getMock();
+
+        $googleClient
+            ->expects($this->once())
+            ->method('fetchAccessTokenWithRefreshToken')
+            ->with('valid-refresh-token')
+            ->willReturn([
+                'access_token' => 'new-access-token',
+                'refresh_token' => 'new-refresh-token',
+                'expires_in' => 3600,
+            ]);
+
+        $service = $this->getMockBuilder(GoogleCalendarService::class)
+            ->onlyMethods([
+                'makeClient',
+            ])
+            ->getMock();
+
+        $service
+            ->method('makeClient')
+            ->willReturn($googleClient);
+
+        $client = $service->authenticatedClient($credential);
+
+        $this->assertSame($googleClient, $client);
+
+        $this->assertDatabaseHas('google_credentials', [
+            'id' => $credential->id,
+            'access_token' => 'new-access-token',
+        ]);
+
+        $this->assertDatabaseHas('google_credentials', [
+            'id' => $credential->id,
+            'refresh_token' => 'new-refresh-token',
+        ]);
     }
 
     public function test_authenticated_client_deletes_credential_when_refresh_token_is_invalid(): void
