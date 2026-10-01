@@ -9,11 +9,14 @@ use App\Models\QaReply;
 use App\Models\QaThread;
 use App\Models\User;
 use App\Notifications\QaReplyReceivedNotification;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class IndexTest extends TestCase
 {
+    use RefreshDatabase;
+
     /**
      * A basic feature test example.
      */

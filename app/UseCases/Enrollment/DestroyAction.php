@@ -8,6 +8,7 @@ use App\Enums\EnrollmentStatus;
 use App\Exceptions\Enrollment\EnrollmentInvalidTransitionException;
 use App\Models\Enrollment;
 use App\Services\DefaultEnrollmentService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -40,5 +41,8 @@ final class DestroyAction
 
             $this->defaultEnrollmentService->resolveAfterStatusChange($user, $enrollment);
         });
+
+        Cache::forget(config('dashboard.admin_kpi_cache_key'));
+        Cache::forget(config('dashboard.admin_completion_rate_cache_key'));
     }
 }
