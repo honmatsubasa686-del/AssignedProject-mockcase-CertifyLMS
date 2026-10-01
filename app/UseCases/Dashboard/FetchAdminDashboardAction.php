@@ -31,7 +31,10 @@ final class FetchAdminDashboardAction
     public function __invoke(User $admin): AdminDashboardViewModel
     {
         $kpi = $this->safe(fn () => $this->stats->adminKpi());
-        $completionRate = $this->safe(fn () => $this->stats->completionRateByCertification());
+
+        $completionRate = $this->safe(
+            fn () => $this->stats->completionRateByCertification()
+        );
 
         $byCertificationTop10 = $kpi !== null
             ? collect($kpi['by_certification'])->take(10)

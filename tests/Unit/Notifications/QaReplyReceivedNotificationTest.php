@@ -10,11 +10,14 @@ use App\Models\QaThread;
 use App\Models\User;
 use App\Notifications\QaReplyReceivedNotification;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Messages\MailMessage;
 use Tests\TestCase;
 
 class QaReplyReceivedNotificationTest extends TestCase
 {
+    use RefreshDatabase;
+
     /**
      * A basic unit test example.
      */

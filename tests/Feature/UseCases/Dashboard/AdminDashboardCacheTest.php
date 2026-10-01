@@ -10,6 +10,7 @@ use App\Models\Enrollment;
 use App\Models\User;
 use App\Services\EnrollmentStatusChangeService;
 use App\UseCases\Dashboard\FetchAdminDashboardAction;
+use App\UseCases\Enrollment\DestroyAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -156,5 +157,29 @@ class AdminDashboardCacheTest extends TestCase
             $afterRate,
             '状態遷移後は修了率キャッシュも無効化され、最新の修了率(1/2)が返るはず',
         );
+    }
+
+    public function test_admin_dashboard_cache_is_invalidated_when_enrollment_is_destroyed(): void
+    {
+        $admin = User::factory()->admin()->inProgress()->create();
+        $cert = Certification::factory()->published()->create();
+        $student = User::factory()->student()->inProgress()->create();
+
+        $enrollment = Enrollment::factory()
+            ->for($student)
+            ->for($cert)
+            ->learning()
+            ->create();
+
+        Cache::flush();
+
+        $before = app(FetchAdminDashboardAction::class)($admin);
+
+        app(DestroyAction::class)($enrollment);
+
+        $after = app(FetchAdminDashboardAction::class)($admin);
+
+        $this->assertSame(1, $before->kpi['learning_count']);
+        $this->assertSame(0, $after->kpi['learning_count']);
     }
 }

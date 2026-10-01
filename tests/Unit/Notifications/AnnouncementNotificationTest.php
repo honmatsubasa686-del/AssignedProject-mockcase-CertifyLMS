@@ -8,11 +8,14 @@ use App\Models\Announcement;
 use App\Models\User;
 use App\Notifications\AnnouncementNotification;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Messages\MailMessage;
 use Tests\TestCase;
 
 class AnnouncementNotificationTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_via_uses_database_and_mail_channels(): void
     {
         $announcement = Announcement::factory()->create();

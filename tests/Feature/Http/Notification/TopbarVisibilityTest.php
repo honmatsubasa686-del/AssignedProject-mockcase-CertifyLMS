@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature\Http\Notification;
 
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 final class TopbarVisibilityTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_student_can_see_notification_bell(): void
     {
         $student = User::factory()->student()->inProgress()->create();
